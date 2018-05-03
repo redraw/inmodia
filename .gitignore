@@ -1,6 +1,7 @@
 env
-.env
 **/*.pyc
+node_modules
 .vscode
-.python-version
-*.sqlite3
+.env
+.serverless
+env.prod.yml

@@ -1,0 +1,24 @@
+service: inmodia
+
+provider:
+  name: aws
+  runtime: python3.6
+  stage: local
+  environment: ${file(./env.${opt:stage, self:provider.stage}.yml)}
+
+functions:
+  cron:
+    handler: run.handler
+    events:
+      - schedule: rate(6 hours)
+
+  clean:
+    handler: run.clean
+    events:
+      - schedule: rate(30 days)
+
+  sync:
+    handler: run.sync
+
+plugins:
+  - serverless-python-requirements
