@@ -1,58 +1,64 @@
 import os
 import time
-import itertools
+import html
 import asyncio
 import aiohttp
-import redis
-
-from aiotg import Bot, Chat
-
-from bs4 import BeautifulSoup
 from hashlib import md5
 
+import redis
+from aiotg import Bot
+from bs4 import BeautifulSoup
 
-BOT_CHANNEL = os.getenv('BOT_CHANNEL', '@inmueblesparticularlp')
-URL = "http://clasificados.eldia.com/clasificados-alquiler-departamentos-1-dormitorio-la-plata"
-NAMESPACE = os.getenv('NAMESPACE', 'inmodia.avisos')
+
+BOT_CHANNEL = os.getenv('BOT_CHANNEL')
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+URL = os.getenv('URL')
+REDIS_KEY = os.getenv('REDIS_KEY')
 
 db = redis.StrictRedis(
-    host=os.getenv('REDIS_HOST', 'localhost'),
-    port=os.getenv('REDIS_PORT', 6379),
+    host=os.getenv('REDIS_HOST'),
+    port=os.getenv('REDIS_PORT'),
     password=os.getenv('REDIS_PASS'),
     decode_responses=True
 )
 
 assert db.ping()
 
-bot = Bot(api_token=os.environ['TELEGRAM_TOKEN'])
+bot = Bot(api_token=TELEGRAM_TOKEN)
 canal = bot.channel(BOT_CHANNEL)
 
 
-async def spamear(avisos=[]):
-    print(f"spameando {len(avisos)} avisos...")
+async def enviar(avisos=[]):
+    if not avisos:
+        return
+
+    print(f"enviando {len(avisos)} avisos...")
     lineas = []
 
     for aviso in avisos:
         texto = aviso.text.strip()
-        link = aviso.a['href'] if aviso.a else None
-        linea = "🏠 "
 
-        if link:
-            linea += f"[{texto}]({link})"
-        else:
-            linea += texto
+        if aviso.a:
+            link = aviso.a['href']
+            texto = "<a href='{link}'>{texto}</a>".format(
+                link=html.escape(link), 
+                texto=html.escape(texto)
+            )
 
-        lineas.append(linea)
+        lineas.append(f"🏠 {texto}")
 
-    await canal.send_text("\n".join(lineas), parse_mode="markdown")
+    texto = "\n".join(lineas)
+    print(texto)
+
+    await canal.send_text(texto, parse_mode="HTML")
 
 
 async def f5():
     print("f5!")
     avisos = []
 
-    avisos_nuevos = set()
-    avisos_visitados = db.zrange(NAMESPACE, 0, -1)
+    nuevos = set()
+    visitados = db.zrange(REDIS_KEY, 0, -1)
 
     async with aiohttp.ClientSession() as session:
         async with session.get(URL) as r:
@@ -64,23 +70,23 @@ async def f5():
         txt = aviso.text.strip().encode('utf8')
         key = md5(txt).hexdigest()
 
-        if key in avisos_visitados:
+        if key in visitados:
             continue
 
         if "particular" in aviso.text.lower():
             avisos.append(aviso)
-            avisos_nuevos.add(key)
+            nuevos.add(key)
 
-    if avisos_nuevos:
+    if nuevos:
         ts = time.time()
-        db.zadd(NAMESPACE, **{key: ts for key in avisos_nuevos})
+        db.zadd(REDIS_KEY, **{key: ts for key in nuevos})
 
     return avisos
 
 
 async def run():
     avisos = await f5()
-    await spamear(avisos)
+    await enviar(avisos)
 
 
 def handler(event, ctx):
@@ -94,11 +100,15 @@ def sync(event, ctx):
 
 
 def clean(event, ctx):
-    """me quedo con los ultimos 1000"""
-    db.zremrangebyrank(NAMESPACE, 0, -1000)
+    return db.zremrangebyrank(REDIS_KEY, 0, -1000)
+
+
+def delete(event, ctx):
+    return db.delete(REDIS_KEY)
 
 
 if __name__ == '__main__':
+    loop = asyncio.get_event_loop()
 
     async def cron():
         errors = 0

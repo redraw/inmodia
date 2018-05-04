@@ -7,10 +7,10 @@ provider:
   environment: ${file(./env.${opt:stage, self:provider.stage}.yml)}
 
 functions:
-  cron:
+  run:
     handler: run.handler
     events:
-      - schedule: rate(6 hours)
+      - schedule: rate(8 hours)
 
   clean:
     handler: run.clean
@@ -19,6 +19,9 @@ functions:
 
   sync:
     handler: run.sync
+
+  delete:
+    handler: run.delete
 
 plugins:
   - serverless-python-requirements
