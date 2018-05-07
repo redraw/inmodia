@@ -12,7 +12,15 @@ from bs4 import BeautifulSoup
 
 BOT_CHANNEL = os.getenv('BOT_CHANNEL')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+
 URL = os.getenv('URL')
+CSS_SELECTOR = os.getenv('CSS_SELECTOR')
+
+KEYWORDS = [
+    kw.strip().lower()
+    for kw in os.getenv('KEYWORDS', '').split(',')
+]
+
 REDIS_KEY = os.getenv('REDIS_KEY')
 
 db = redis.StrictRedis(
@@ -40,8 +48,8 @@ async def enviar(avisos=[]):
 
         if aviso.a:
             link = aviso.a['href']
-            texto = "<a href='{link}'>{texto}</a>".format(
-                link=html.escape(link), 
+            texto = "{texto} (<a href='{link}'>link</a>)".format(
+                link=html.escape(link),
                 texto=html.escape(texto)
             )
 
@@ -66,14 +74,14 @@ async def f5():
 
     dom = BeautifulSoup(content, 'html.parser')
 
-    for aviso in dom.select('.avisos p, .avisosconfoto'):
-        txt = aviso.text.strip().encode('utf8')
-        key = md5(txt).hexdigest()
+    for aviso in dom.select(CSS_SELECTOR):
+        txt = aviso.text.lower()
+        key = md5(txt.encode('utf8')).hexdigest()
 
         if key in visitados:
             continue
 
-        if "particular" in aviso.text.lower():
+        if not KEYWORDS or any(kw in txt for kw in KEYWORDS):
             avisos.append(aviso)
             nuevos.add(key)
 
