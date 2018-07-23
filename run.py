@@ -1,6 +1,7 @@
 import os
 import time
 import html
+import json
 import asyncio
 import aiohttp
 from hashlib import md5
@@ -10,30 +11,23 @@ from aiotg import Bot
 from bs4 import BeautifulSoup
 
 
-BOT_CHANNEL = os.getenv('BOT_CHANNEL')
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-
-URL = os.getenv('URL')
-CSS_SELECTOR = os.getenv('CSS_SELECTOR')
-
-KEYWORDS = [
-    kw.strip().lower()
-    for kw in os.getenv('KEYWORDS', '').split(',')
-]
-
-REDIS_KEY = os.getenv('REDIS_KEY')
-
+# redis
 db = redis.StrictRedis(
     host=os.getenv('REDIS_HOST'),
     port=os.getenv('REDIS_PORT'),
     password=os.getenv('REDIS_PASS'),
     decode_responses=True
 )
-
 assert db.ping()
+REDIS_KEY = os.getenv('REDIS_KEY')
 
-bot = Bot(api_token=TELEGRAM_TOKEN)
-canal = bot.channel(BOT_CHANNEL)
+# telegram
+bot = Bot(api_token=os.environ['TELEGRAM_TOKEN'])
+canal = bot.channel(os.environ['BOT_CHANNEL'])
+
+# config
+with open('config.json') as f:
+    config = json.load(f)
 
 
 async def enviar(avisos=[]):
@@ -61,27 +55,29 @@ async def enviar(avisos=[]):
     await canal.send_text(texto, parse_mode="HTML")
 
 
-async def f5():
-    print("f5!")
+async def f5(session, url):
+    print(f"f5 - {url}")
     avisos = []
 
     nuevos = set()
     visitados = db.zrange(REDIS_KEY, 0, -1)
 
-    async with aiohttp.ClientSession() as session:
-        async with session.get(URL) as r:
-            content = await r.text()
+    async with session.get(url) as r:
+        content = await r.text()
 
     dom = BeautifulSoup(content, 'html.parser')
 
-    for aviso in dom.select(CSS_SELECTOR):
+    selector = config.get('selector')
+    keywords = config.get('keywords')
+
+    for aviso in dom.select(selector):
         txt = aviso.text.lower()
         key = md5(txt.encode('utf8')).hexdigest()
 
         if key in visitados:
             continue
 
-        if not KEYWORDS or any(kw in txt for kw in KEYWORDS):
+        if not keywords or any(kw in txt for kw in keywords):
             avisos.append(aviso)
             nuevos.add(key)
 
@@ -93,8 +89,15 @@ async def f5():
 
 
 async def run():
-    avisos = await f5()
-    await enviar(avisos)
+    async def task(session, url):
+        avisos = await f5(session, url)
+        await enviar(avisos)
+
+    async with aiohttp.ClientSession() as session:
+        await asyncio.gather(*[
+            task(session, url)
+            for url in config.get('urls', [])
+        ])
 
 
 def handler(event, ctx):

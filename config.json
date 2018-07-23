@@ -1,0 +1,10 @@
+{
+    "urls": [
+        "http://clasificados.eldia.com/clasificados-alquiler-departamentos-la-plata",
+        "http://clasificados.eldia.com/clasificados-alquiler-departamentos-1-dormitorio-la-plata",
+        "http://clasificados.eldia.com/clasificados-alquiler-departamentos-2-dormitorios-la-plata",
+        "http://clasificados.eldia.com/clasificados-alquiler-casas-la-plata"
+    ],
+    "selector": ".avisos p, .avisosconfoto",
+    "keywords": ["alquilo", "particular", "dueño"]
+}
